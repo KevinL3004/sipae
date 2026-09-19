@@ -1,0 +1,10 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    Options +FollowSymlinks
+    RewriteEngine On
+
+    # Evitar el loop: si ya está en public/, no redirigir
+    RewriteCond %{REQUEST_URI} !^/sipae/public/
+    RewriteRule ^(.*)$ /sipae/public/$1 [L,QSA]
+</IfModule>
