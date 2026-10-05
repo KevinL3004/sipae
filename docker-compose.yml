@@ -1,0 +1,44 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sipae_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: sipae_db
+      POSTGRES_USER: sipae_user
+      POSTGRES_PASSWORD: Sipae2025!
+    ports:
+      - "5433:5432"
+    volumes:
+      - sipae_pg_data:/var/lib/postgresql/data
+      - ./sql/sipae_postgres.sql:/docker-entrypoint-initdb.d/01-sipae_postgres.sql:ro
+    networks:
+      - sipae_net
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U sipae_user -d sipae_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sipae_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@sipae.edu.gt
+      PGADMIN_DEFAULT_PASSWORD: Admin2025!
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sipae_net
+
+volumes:
+  sipae_pg_data:
+
+networks:
+  sipae_net:
+    driver: bridge
