@@ -40,6 +40,12 @@ export class Usuario {
   @Column({ name: 'refresh_token_hash', nullable: true })
   refreshTokenHash: string;
 
+  @Column({ name: 'reset_token_hash', nullable: true })
+  resetTokenHash: string;
+
+  @Column({ name: 'reset_token_expira', nullable: true, type: 'timestamptz' })
+  resetTokenExpira: Date;
+
   @CreateDateColumn({ name: 'creado_en', type: 'timestamptz' })
   creadoEn: Date;
 

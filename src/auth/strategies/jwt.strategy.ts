@@ -14,21 +14,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     super({
       jwtFromRequest: (req) => {
-        const bearerToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-        if (bearerToken) return bearerToken;
+        const fromBearer = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+        if (fromBearer) return fromBearer;
 
-        const authHeader = req?.headers?.authorization;
-        if (!authHeader) return null;
+        const headerValue = req?.headers?.authorization;
+        if (!headerValue) return null;
 
-        if (Array.isArray(authHeader)) {
-          const firstHeader = authHeader[0]?.trim();
-          if (!firstHeader) return null;
-          return firstHeader.startsWith('Bearer ') ? firstHeader.slice(7).trim() : firstHeader;
+        const values = Array.isArray(headerValue) ? headerValue : [headerValue];
+        for (const value of values) {
+          const normalized = value.trim();
+          if (!normalized) continue;
+          if (normalized.toLowerCase().startsWith('bearer ')) {
+            return normalized.slice(7).trim();
+          }
+          return normalized;
         }
 
-        const headerValue = authHeader.trim();
-        if (!headerValue) return null;
-        return headerValue.startsWith('Bearer ') ? headerValue.slice(7).trim() : headerValue;
+        return null;
       },
       secretOrKey: jwtSecret,
     });

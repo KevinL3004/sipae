@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable, NotFoundException, ConflictException
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -49,23 +51,54 @@ export class UsersService {
 
     const hash = await bcrypt.hash(data.password, 10);
     const usuario = this.repo.create({
-      username: data.username,
-      passwordHash: hash,
+      username:       data.username,
+      passwordHash:   hash,
       nombreCompleto: data.nombreCompleto,
-      correo: data.correo,
-      rol: data.rol,
+      correo:         data.correo,
+      rol:            data.rol,
     });
     return this.repo.save(usuario);
   }
 
   async actualizarRefreshToken(id: string, hash: string | null): Promise<void> {
     await this.repo.update(id, {
-      refreshTokenHash: hash ?? undefined,
-    });
+      refreshTokenHash: hash,
+    } as any);
   }
 
   async actualizarUltimoAcceso(id: string): Promise<void> {
-    await this.repo.update(id, { ultimoAcceso: new Date() });
+    await this.repo.update(id, { ultimoAcceso: new Date() } as Partial<Usuario>);
+  }
+
+  async guardarResetToken(id: string, token: string): Promise<void> {
+    const hash = await bcrypt.hash(token, 10);
+    const expira = new Date(Date.now() + 1000 * 60 * 30); // 30 minutos
+    await this.repo.update(id, {
+      resetTokenHash:   hash,
+      resetTokenExpira: expira,
+    } as Partial<Usuario>);
+  }
+
+  async validarResetToken(username: string, token: string): Promise<Usuario | null> {
+    const usuario = await this.repo.findOne({ where: { username } });
+    if (!usuario?.resetTokenHash) return null;
+    if (usuario.resetTokenExpira < new Date()) return null;
+    const ok = await bcrypt.compare(token, usuario.resetTokenHash);
+    return ok ? usuario : null;
+  }
+
+  async resetearPassword(id: string, newPassword: string): Promise<void> {
+    const hash = await bcrypt.hash(newPassword, 10);
+    await this.repo.update(id, {
+      passwordHash:     hash,
+      resetTokenHash:   null as any,
+      resetTokenExpira: null as any,
+    } as Partial<Usuario>);
+  }
+
+  async cambiarPassword(id: string, newPassword: string): Promise<void> {
+    const hash = await bcrypt.hash(newPassword, 10);
+    await this.repo.update(id, { passwordHash: hash });
   }
 
   async desactivar(id: string): Promise<void> {
