@@ -11,7 +11,7 @@ export class UsersService {
   constructor(
     @InjectRepository(Usuario)
     private readonly repo: Repository<Usuario>,
-  ) {}
+  ) { }
 
   async findByUsername(username: string): Promise<Usuario | null> {
     return this.repo.findOne({ where: { username, activo: true } });
@@ -51,11 +51,11 @@ export class UsersService {
 
     const hash = await bcrypt.hash(data.password, 10);
     const usuario = this.repo.create({
-      username:       data.username,
-      passwordHash:   hash,
+      username: data.username,
+      passwordHash: hash,
       nombreCompleto: data.nombreCompleto,
-      correo:         data.correo,
-      rol:            data.rol,
+      correo: data.correo,
+      rol: data.rol,
     });
     return this.repo.save(usuario);
   }
@@ -74,7 +74,7 @@ export class UsersService {
     const hash = await bcrypt.hash(token, 10);
     const expira = new Date(Date.now() + 1000 * 60 * 30); // 30 minutos
     await this.repo.update(id, {
-      resetTokenHash:   hash,
+      resetTokenHash: hash,
       resetTokenExpira: expira,
     } as Partial<Usuario>);
   }
@@ -90,8 +90,8 @@ export class UsersService {
   async resetearPassword(id: string, newPassword: string): Promise<void> {
     const hash = await bcrypt.hash(newPassword, 10);
     await this.repo.update(id, {
-      passwordHash:     hash,
-      resetTokenHash:   null as any,
+      passwordHash: hash,
+      resetTokenHash: null as any,
       resetTokenExpira: null as any,
     } as Partial<Usuario>);
   }
@@ -103,5 +103,17 @@ export class UsersService {
 
   async desactivar(id: string): Promise<void> {
     await this.repo.update(id, { activo: false });
+  }
+
+  async actualizar(id: string, data: any): Promise<Partial<Usuario>> {
+    const usuario = await this.findById(id);
+    if (data.password) {
+      data.passwordHash = await bcrypt.hash(data.password, 10);
+      delete data.password;
+    }
+    Object.assign(usuario, data);
+    await this.repo.save(usuario);
+    const { passwordHash, refreshTokenHash, resetTokenHash, ...result } = usuario as any;
+    return result;
   }
 }
