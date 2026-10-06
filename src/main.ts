@@ -1,9 +1,14 @@
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 import { ValidationPipe } from '@nestjs/common';
+import { ApiExceptionFilter } from './common/api-exception.filter.js';
+import { ApiResponseInterceptor } from './common/api-response.interceptor.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.useGlobalFilters(new ApiExceptionFilter(app.get(HttpAdapterHost)));
+  app.useGlobalInterceptors(new ApiResponseInterceptor());
 
   app.setGlobalPrefix('api/v1');
 
