@@ -30,6 +30,7 @@ const __dirname = dirname(__filename);
         password: config.get('DB_PASSWORD'),
         database: config.get('DB_NAME'),
         synchronize: false,
+        ssl: { rejectUnauthorized: false },
         logging: config.get('NODE_ENV') === 'development',
         entities: [
           __dirname + '/**/*.entity{.ts,.js}',
