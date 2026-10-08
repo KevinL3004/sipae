@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { unlink } from 'node:fs/promises';
 import { AsignacionPresupuesto, EstadoAsignacion } from './asignacion-presupuesto.entity.js';
 import { Proveedor } from './proveedor.entity.js';
 import { PlanCompra, EstadoPlan } from './plan-compra.entity.js';
@@ -12,6 +13,7 @@ import { CreateProveedorDto } from './dto/create-proveedor.dto.js';
 import { CreatePlanDto } from './dto/create-plan.dto.js';
 import { CreateCompraDto } from './dto/create-compra.dto.js';
 import { TecnicoMineduc } from '../escuelas/tecnico-mineduc.entity.js';
+import type { Express } from 'express';
 
 @Injectable()
 export class ComprasService {
@@ -126,7 +128,10 @@ export class ComprasService {
                     alimento: { id: i.alimentoId } as any,
                     cantidadAComprar: i.cantidadAComprar,
                     unidad: i.unidad,
-                    precioUnitarioQ: i.precioUnitarioQ,
+                    precioUnitarioQ: i.precioUnitarioQ && i.precioUnitarioQ > 0 ? i.precioUnitarioQ : undefined,
+                    frecuenciaCompra: i.frecuenciaCompra ?? 'por_definir',
+                    fechaCompraSugerida: i.fechaCompraSugerida,
+                    observacionSugerencia: i.observacionSugerencia,
                 } as any);
                 return item as unknown as ItemPlanCompra;
             });
@@ -182,9 +187,102 @@ export class ComprasService {
         return this.compraRepo.save(compra);
     }
 
+    async cargarFactura(id: string, file: Express.Multer.File) {
+        if (!file?.path) throw new BadRequestException('Debes adjuntar una factura PDF o imagen');
+        const compra = await this.compraRepo.findOne({ where: { id } });
+        if (!compra) throw new NotFoundException('Compra no encontrada');
+        if (compra.estado !== EstadoCompra.REGISTRADA) {
+            throw new BadRequestException('Sólo se pueden adjuntar facturas a compras pendientes de revisión');
+        }
+        const facturaAnterior = compra.imagenFactura;
+        compra.imagenFactura = file.path;
+        compra.facturaNombreOriginal = file.originalname;
+        compra.facturaMimeType = file.mimetype;
+        compra.facturaTamanoBytes = file.size;
+        const guardada = await this.compraRepo.save(compra);
+        if (facturaAnterior && facturaAnterior !== file.path) {
+            await unlink(facturaAnterior).catch(() => undefined);
+        }
+        return guardada;
+    }
+
+    async getFactura(id: string): Promise<CompraRealizada> {
+        const compra = await this.compraRepo.findOne({ where: { id } });
+        if (!compra) throw new NotFoundException('Compra no encontrada');
+        if (!compra.imagenFactura) throw new NotFoundException('La compra no tiene factura adjunta');
+        return compra;
+    }
+
+    async getConciliacion(id: string) {
+        const compra = await this.compraRepo.findOne({
+            where: { id },
+            relations: { plan: { items: { alimento: true } }, items: { alimento: true } },
+        });
+        if (!compra) throw new NotFoundException('Compra no encontrada');
+
+        const planned = new Map<string, ItemPlanCompra>();
+        for (const item of compra.plan?.items ?? []) planned.set(item.alimento.id, item);
+        const actual = new Map<string, ItemCompra>();
+        for (const item of compra.items ?? []) actual.set(item.alimento.id, item);
+
+        const alimentoIds = new Set([...planned.keys(), ...actual.keys()]);
+        const partidas = [...alimentoIds].map(alimentoId => {
+            const planItem = planned.get(alimentoId);
+            const actualItem = actual.get(alimentoId);
+            const cantidadPlaneada = Number(planItem?.cantidadAComprar ?? 0);
+            const cantidadComprada = Number(actualItem?.cantidadComprada ?? 0);
+            const subtotalPlaneado = planItem?.precioUnitarioQ == null
+                ? null
+                : Math.round(cantidadPlaneada * Number(planItem.precioUnitarioQ) * 100) / 100;
+            const subtotalReal = actualItem
+                ? Math.round(cantidadComprada * Number(actualItem.precioUnitarioQ) * 100) / 100
+                : 0;
+            return {
+                alimentoId,
+                alimento: actualItem?.alimento?.nombre ?? planItem?.alimento?.nombre ?? 'Alimento',
+                cantidadPlaneada,
+                cantidadComprada,
+                diferenciaCantidad: Math.round((cantidadComprada - cantidadPlaneada) * 1000) / 1000,
+                subtotalPlaneado,
+                subtotalReal,
+                diferenciaCosto: subtotalPlaneado == null ? null : Math.round((subtotalReal - subtotalPlaneado) * 100) / 100,
+                estado: !planItem ? 'no_planificado' : !actualItem ? 'no_comprado' : cantidadComprada === cantidadPlaneada ? 'coincide' : 'diferencia',
+            };
+        });
+        const tieneDiferencias = partidas.some(partida => partida.estado !== 'coincide');
+        const comprasTotal = Math.round(partidas.reduce((total, partida) => total + partida.subtotalReal, 0) * 100) / 100;
+
+        return {
+            ok: true,
+            mensaje: 'Conciliación calculada; requiere revisión humana y no constituye aprobación automática',
+            data: {
+                compraId: compra.id,
+                estadoCompra: compra.estado,
+                facturaAdjunta: Boolean(compra.imagenFactura),
+                totalDeclarado: Number(compra.totalGastadoQ),
+                totalCalculadoPartidas: comprasTotal,
+                diferenciaTotalDeclarado: Math.round((Number(compra.totalGastadoQ) - comprasTotal) * 100) / 100,
+                montoPresupuestado: Number(compra.plan?.costoEstimadoQ ?? 0),
+                diferenciaVsPresupuesto: Math.round((Number(compra.totalGastadoQ) - Number(compra.plan?.costoEstimadoQ ?? 0)) * 100) / 100,
+                tieneDiferencias,
+                partidas,
+            },
+        };
+    }
+
     async verificarCompra(id: string) {
         const compra = await this.compraRepo.findOne({ where: { id } });
         if (!compra) throw new NotFoundException('Compra no encontrada');
+        if (!compra.imagenFactura) {
+            throw new BadRequestException('Adjunta la factura antes de verificar la compra');
+        }
+        const totalPartidas = Math.round((compra.items ?? []).reduce(
+            (total, item) => total + Number(item.cantidadComprada) * Number(item.precioUnitarioQ),
+            0,
+        ) * 100) / 100;
+        if (Math.abs(totalPartidas - Number(compra.totalGastadoQ)) > 0.01) {
+            throw new BadRequestException('El total de las partidas no coincide con el total declarado; revisa la conciliación');
+        }
         await this.compraRepo.update(id, { estado: EstadoCompra.VERIFICADA });
         return { ok: true, mensaje: 'Compra verificada correctamente' };
     }

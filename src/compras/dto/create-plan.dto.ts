@@ -1,7 +1,7 @@
 import {
     IsUUID, IsDateString, IsNumber,
     IsArray, ValidateNested, IsOptional,
-    IsString, Min
+    IsString, Min, IsIn
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -16,6 +16,14 @@ export class CreateItemPlanDto {
     unidad: string;
 
     @IsNumber() @IsOptional() precioUnitarioQ?: number;
+
+    @IsIn(['no_perecedero', 'semanal', 'diaria', 'por_definir'])
+    @IsOptional()
+    frecuenciaCompra?: string;
+
+    @IsDateString() @IsOptional() fechaCompraSugerida?: string;
+
+    @IsString() @IsOptional() observacionSugerencia?: string;
 }
 
 export class CreatePlanDto {

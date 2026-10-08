@@ -31,6 +31,27 @@
 $ npm install
 ```
 
+## SIPAE: documentos, menús y compras
+
+El esquema inicial para una base nueva está en `sql/sipae_postgres.sql`. Para una base existente, aplica la migración sin borrar el volumen ni los datos:
+
+```bash
+cd backend
+docker exec -i sipae_postgres psql -v ON_ERROR_STOP=1 -U sipae_user -d sipae_db < sql/migrations/20261008_workflow_documents_purchases.sql
+```
+
+Los PDFs oficiales y comprobantes se almacenan en `backend/uploads/official-menus` y `backend/uploads/invoices`. Mantén esa carpeta en almacenamiento persistente y no la sirvas como directorio público. Las descargas pasan por endpoints autenticados.
+
+Flujo disponible en esta versión:
+
+- La técnica carga un PDF oficial como borrador, captura manualmente los renglones de ración, publica el menú y lo distribuye a escuelas activas.
+- Los usuarios escolares sólo listan y descargan menús distribuidos a escuelas que tienen asignadas; el rol técnico conserva la vista global.
+- La sugerencia de cantidades escala las cantidades transcritas por el número de beneficiarios. No usa IA ni interpreta automáticamente el PDF.
+- Los renglones sugeridos se pueden vincular al catálogo y editar en un plan. El precio de referencia sólo se muestra cuando existe un precio manual con su fuente, fecha y zona; no se afirma que sea un precio oficial.
+- Una compra requiere factura adjunta y coincidencia entre el total declarado y la suma de sus partidas antes de poder marcarse verificada. La conciliación frente al plan es una ayuda de revisión y no aprueba diferencias automáticamente.
+
+La aplicación no incluye OCR/IA, consulta automática de precios oficiales, envío de cotizaciones a proveedores ni extracción de datos de facturas. Esos puntos requieren fuentes, reglas y aprobación operativa antes de implementarse.
+
 ## Compile and run the project
 
 ```bash

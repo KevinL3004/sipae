@@ -41,6 +41,15 @@ export class CompraRealizada {
     @Column({ name: 'imagen_factura', nullable: true, type: 'text' })
     imagenFactura: string;
 
+    @Column({ name: 'factura_nombre_original', nullable: true, length: 255 })
+    facturaNombreOriginal: string;
+
+    @Column({ name: 'factura_mime_type', nullable: true, length: 100 })
+    facturaMimeType: string;
+
+    @Column({ name: 'factura_tamano_bytes', type: 'bigint', nullable: true })
+    facturaTamanoBytes: number;
+
     @Column({ type: 'enum', enum: EstadoCompra, default: EstadoCompra.REGISTRADA })
     estado: EstadoCompra;
 

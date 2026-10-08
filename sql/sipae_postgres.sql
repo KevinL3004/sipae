@@ -102,6 +102,12 @@ CREATE TABLE alimentos (
     carbohidratos_g     NUMERIC(7,2)    NOT NULL DEFAULT 0 CHECK (carbohidratos_g >= 0),
     grasas_g            NUMERIC(7,2)    NOT NULL DEFAULT 0 CHECK (grasas_g >= 0),
     precio_ref_q        NUMERIC(8,2)    CHECK (precio_ref_q > 0),
+    precio_ref_fuente   VARCHAR(200),
+    precio_ref_fecha    DATE,
+    precio_ref_zona     VARCHAR(120),
+    tipo_compra         VARCHAR(20)     NOT NULL DEFAULT 'por_definir',
+    origen_compra       VARCHAR(30)     NOT NULL DEFAULT 'por_definir',
+    dias_vida_util      SMALLINT,
     unidad_inventario   VARCHAR(20)     NOT NULL DEFAULT 'lb',
     activo              BOOLEAN         NOT NULL DEFAULT TRUE,
     fuente_nutricional  VARCHAR(100)    DEFAULT 'INCAP 2021',
@@ -122,6 +128,16 @@ CREATE TABLE menus_oficiales (
     fecha_inicio   DATE        NOT NULL,
     fecha_fin      DATE        NOT NULL,
     estado         estado_menu NOT NULL DEFAULT 'borrador',
+    nivel_educativo VARCHAR(40),
+    departamento   VARCHAR(100),
+    grupo_beneficiario VARCHAR(120),
+    numero_entrega VARCHAR(80),
+    dias_cobertura SMALLINT,
+    monto_diario_alumno_q NUMERIC(8,2),
+    documento_path TEXT,
+    documento_nombre VARCHAR(255),
+    documento_mime_type VARCHAR(100),
+    documento_tamano_bytes BIGINT,
     creado_en      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_fechas_menu CHECK (fecha_fin > fecha_inicio)
@@ -129,6 +145,16 @@ CREATE TABLE menus_oficiales (
 CREATE INDEX idx_menus_tecnico ON menus_oficiales(tecnico_id);
 CREATE INDEX idx_menus_estado  ON menus_oficiales(estado);
 CREATE INDEX idx_menus_fechas  ON menus_oficiales(fecha_inicio, fecha_fin);
+
+CREATE TABLE menus_escuelas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    menu_id UUID NOT NULL REFERENCES menus_oficiales(id) ON DELETE CASCADE,
+    escuela_id UUID NOT NULL REFERENCES escuelas(id) ON DELETE CASCADE,
+    distribuido_por UUID NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+    distribuido_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_menu_escuela UNIQUE (menu_id, escuela_id)
+);
+CREATE INDEX idx_menus_escuelas_escuela ON menus_escuelas(escuela_id, distribuido_en DESC);
 
 -- ============================================================
 -- TABLA: dias_menu
@@ -158,6 +184,21 @@ CREATE TABLE ingredientes_dia (
 );
 CREATE INDEX idx_ing_dia       ON ingredientes_dia(dia_menu_id);
 CREATE INDEX idx_ing_alimento  ON ingredientes_dia(alimento_id);
+
+CREATE TABLE menus_racion_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    menu_id UUID NOT NULL REFERENCES menus_oficiales(id) ON DELETE CASCADE,
+    opcion_codigo VARCHAR(20) NOT NULL,
+    grupo_beneficiario VARCHAR(120) NOT NULL,
+    alimento_nombre VARCHAR(150) NOT NULL,
+    presentacion VARCHAR(120) NOT NULL,
+    cantidad NUMERIC(10,3) NOT NULL CHECK (cantidad > 0),
+    unidad VARCHAR(20) NOT NULL,
+    origen_compra VARCHAR(30) NOT NULL DEFAULT 'por_definir',
+    grupo_nutriente VARCHAR(80),
+    alimento_id UUID REFERENCES alimentos(id) ON DELETE SET NULL
+);
+CREATE INDEX idx_menu_racion_opcion ON menus_racion_items(menu_id, opcion_codigo, grupo_beneficiario);
 
 -- ============================================================
 -- TABLA: asignaciones_presupuesto
@@ -268,6 +309,9 @@ CREATE TABLE items_plan_compra (
     precio_unitario_q   NUMERIC(8,2)  CHECK (precio_unitario_q > 0),
     subtotal_q          NUMERIC(12,2) GENERATED ALWAYS AS
                             (ROUND(cantidad_a_comprar * precio_unitario_q, 2)) STORED,
+    frecuencia_compra   VARCHAR(20) NOT NULL DEFAULT 'por_definir',
+    fecha_compra_sugerida DATE,
+    observacion_sugerencia TEXT,
     CONSTRAINT uq_item_plan UNIQUE (plan_id, alimento_id)
 );
 CREATE INDEX idx_ipc_plan     ON items_plan_compra(plan_id);
@@ -285,6 +329,9 @@ CREATE TABLE compras_realizadas (
     total_gastado_q  NUMERIC(12,2) NOT NULL CHECK (total_gastado_q > 0),
     numero_factura   VARCHAR(60),
     imagen_factura   TEXT,
+    factura_nombre_original VARCHAR(255),
+    factura_mime_type VARCHAR(100),
+    factura_tamano_bytes BIGINT,
     estado           estado_compra NOT NULL DEFAULT 'registrada',
     observaciones    TEXT,
     registrado_en    TIMESTAMPTZ   NOT NULL DEFAULT NOW()

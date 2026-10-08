@@ -27,6 +27,15 @@ export class ItemPlanCompra {
     @Column({ name: 'precio_unitario_q', type: 'numeric', precision: 8, scale: 2, nullable: true })
     precioUnitarioQ: number;
 
+    @Column({ name: 'frecuencia_compra', type: 'varchar', length: 20, default: 'por_definir' })
+    frecuenciaCompra: string;
+
+    @Column({ name: 'fecha_compra_sugerida', type: 'date', nullable: true })
+    fechaCompraSugerida: string;
+
+    @Column({ name: 'observacion_sugerencia', nullable: true, type: 'text' })
+    observacionSugerencia: string;
+
     @Column({
         name: 'subtotal_q', type: 'numeric', precision: 12, scale: 2,
         generatedType: 'STORED',
